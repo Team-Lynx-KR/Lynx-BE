@@ -22,7 +22,6 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         context: .
-        file: ./Dockerfile
         push: true
         tags: ${{ secrets.DOCKER_USERNAME }}/lynx-backend:dev
         platforms: linux/amd64
@@ -50,19 +49,15 @@ jobs:
           echo "${{ secrets.PROD_ENV_FILE }}" > .env
           echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" >> .env
           
-          # 2. 파일명 변경 (안전하게 처리)
-          # 기존 docker-compose.yml이 있으면 백업하고 새 파일로 교체
-          if [ -f "docker-compose.prod.yml" ]; then
-            [ -f "docker-compose.yml" ] && mv docker-compose.yml docker-compose.yml.bak
-            mv docker-compose.prod.yml docker-compose.yml
-          fi
+          # 2. 파일명 변경
+          mv /home/ubuntu/docker-compose.prod.yml /home/ubuntu/docker-compose.yml
           
           # 3. 최신 이미지 받기 및 실행
-          sudo docker compose pull lynx-backend
+          sudo docker pull ${{ secrets.DOCKER_USERNAME }}/lynx-backend:dev
           
-          # 4. 서비스 재시작 (컨테이너 교체)
-          # down 대신 up -d --remove-orphans를 쓰면 가동중지 시간을 최소화할 수 있습니다.
-          sudo docker compose up -d --remove-orphans
+          # (4) 꼬임 방지를 위해 끄고 다시 켬
+          sudo docker compose down
+          sudo docker compose up -d
           
-          # 5. 안 쓰는 이미지 정리
+          # (5) 안 쓰는 이미지 청소
           sudo docker image prune -f
