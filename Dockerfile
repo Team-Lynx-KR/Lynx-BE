@@ -7,7 +7,9 @@ RUN npm install
 
 COPY . .
 
+RUN npm run build
+
 EXPOSE 3000
 
+# 4. 실행
 CMD ["npm", "run", "start:prod"]
-
