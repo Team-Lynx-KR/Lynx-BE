@@ -1,0 +1,54 @@
+services:
+  lynx-mysql:
+    image: mysql:8.0
+    container_name: lynx-db
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - mysql_prod_data:/var/lib/mysql
+    command: 
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lynx-network
+
+volumes:
+  mysql_prod_data:
+
+  lynx-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lynx-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: lynx-mysql
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: production
+    depends_on:
+      lynx-mysql:
+        condition: service_healthy
+    networks:
+      - lynx-network
+
+networks:
+  lynx-network:
+    driver: bridge
