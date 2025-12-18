@@ -28,9 +28,7 @@ volumes:
   mysql_prod_data:
 
   lynx-backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DOCKER_USERNAME}/lynx-backend:dev
     container_name: lynx-backend
     restart: always
     ports:
