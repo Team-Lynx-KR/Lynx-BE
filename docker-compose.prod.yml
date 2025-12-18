@@ -24,9 +24,6 @@ services:
     networks:
       - lynx-network
 
-volumes:
-  mysql_prod_data:
-
   lynx-backend:
     image: ${DOCKER_USERNAME}/lynx-backend:dev
     container_name: lynx-backend
@@ -46,6 +43,9 @@ volumes:
         condition: service_healthy
     networks:
       - lynx-network
+
+volumes:
+  mysql_prod_data:
 
 networks:
   lynx-network:
