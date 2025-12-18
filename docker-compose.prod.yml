@@ -35,10 +35,10 @@ volumes:
       - "3000:3000"
     environment:
       DB_HOST: lynx-mysql
-      DB_PORT: ${DB_PORT:-3306}
-      DB_USER: ${DB_USER}
-      DB_DATABASE: ${DB_DATABASE}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${MYSQL_PORT:-3306}
+      DB_USER: ${MYSQL_USER}
+      DB_DATABASE: ${MYSQL_DATABASE}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
     depends_on:
