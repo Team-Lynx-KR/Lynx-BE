@@ -20,4 +20,9 @@ export class UsersService {
     const user = await this.usersRepository.findOne({ where: { email } });
     return user ? user : undefined;
   }
+
+  /** 리프레시 토큰 업데이트 */
+  async updateRefreshToken(email: string, refreshToken: string): Promise<void> {
+    await this.usersRepository.update({ email }, { refreshToken });
+  }
 }

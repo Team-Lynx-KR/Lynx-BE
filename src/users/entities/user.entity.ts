@@ -17,6 +17,10 @@ export class User {
   @Column({ unique: true })
   nickname: string;
 
+  /** 리프레시 토큰 */
+  @Column({ nullable: true })
+  refreshToken: string;
+
   /** 생성일 */
   @CreateDateColumn()
   createdAt: Date;
