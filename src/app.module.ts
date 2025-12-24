@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { StockModule } from './stock/stock.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -24,7 +25,7 @@ import { AuthModule } from './auth/auth.module';
       autoLoadEntities: true,
       synchronize: true, // 실 운영하기 전에는 반드시 false로 설정
     }),
-  }), UsersModule, AuthModule],
+  }), UsersModule, AuthModule, StockModule],
   controllers: [AppController],
   providers: [AppService],
 })
