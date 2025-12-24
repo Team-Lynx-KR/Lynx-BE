@@ -11,19 +11,19 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  @ApiOperation({ summary: '회원가입', description: '사용자 회원가입' })
+  @ApiOperation({ summary: '회원가입', description: '사용자 회원가입을 위해서는 이메일, 비밀번호, 닉네임이 필요합니다.' })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
   @Post('login')
-  @ApiOperation({ summary: '로그인', description: '사용자 로그인 (액세스 토큰 + 리프레시 토큰 발급)' })
+  @ApiOperation({ summary: '로그인', description: '사용자 로그인을 위해서는 이메일, 비밀번호가 필요합니다. 로그인 성공 시 액세스 토큰과 리프레시 토큰이 발급됩니다.' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
 
   @Post('refresh')
-  @ApiOperation({ summary: '토큰 갱신', description: '리프레시 토큰으로 액세스 토큰 재발급' })
+  @ApiOperation({ summary: '토큰 갱신', description: '리프레시 토큰으로 액세스 토큰 재발급을 위해서는 리프레시 토큰이 필요합니다. 토큰 갱신 성공 시 액세스 토큰과 리프레시 토큰이 발급됩니다.' })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refresh(refreshTokenDto);
   }
