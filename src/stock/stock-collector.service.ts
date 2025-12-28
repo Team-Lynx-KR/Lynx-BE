@@ -101,7 +101,7 @@ export class StockCollectorService implements OnModuleInit {
         }
 
         // 종목 간 딜레이 (초당 거래건수 제한 회피용)
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (error) {
         this.logger.error(
           `종목 ${stock.code} (${stock.name}) 일봉 데이터 수집 실패:`,
@@ -110,7 +110,7 @@ export class StockCollectorService implements OnModuleInit {
         failCount++;
 
         // 에러 후에도 잠깐 쉰 다음 다음 종목 진행
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 

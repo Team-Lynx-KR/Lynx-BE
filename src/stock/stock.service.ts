@@ -60,7 +60,7 @@ export class StockService {
         order: { date: 'DESC' },
       });
 
-      return {message: '종목 조회 성공', data: stock};
+      return {message: '종목 조회 성공', stock: stock, prices: prices};
     } catch (error: any) {
       throw new BadRequestException('종목 조회 실패: ' + (error.response?.data?.message || error.message));
     }
