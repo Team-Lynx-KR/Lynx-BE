@@ -28,6 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException('JWT 토큰에 해당하는 사용자가 존재하지 않습니다.');
     }
-    return { message: 'JWT 토큰 검증 성공' };
+    // 사용자 정보 반환
+    return { id: user.id, email: user.email, nickname: user.nickname };
   }
 }

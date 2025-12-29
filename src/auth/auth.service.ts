@@ -50,22 +50,19 @@ export class AuthService {
       throw new BadRequestException('비밀번호가 일치하지 않습니다.');
     }
 
-    /** 비밀번호 검증 성공 시 JWT 토큰 발급 */
-    if (user && isPasswordValid) {
-      const payload = { email: user.email };
-      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    // 비밀번호 검증 성공 시 JWT 토큰 발급
+    const payload = { email: user.email };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
-      // 리프레시 토큰을 DB에 저장
-      await this.usersService.updateRefreshToken(user.email, refreshToken);
+    // 리프레시 토큰을 DB에 저장
+    await this.usersService.updateRefreshToken(user.email, refreshToken);
 
-      return {
-        message: '로그인 성공',
-        accessToken,
-        refreshToken,
-      };
-    }
-    throw new BadRequestException('로그인 실패');
+    return {
+      message: '로그인 성공',
+      accessToken,
+      refreshToken,
+    };
   }
 
   async refresh(refreshTokenDto: RefreshTokenDto) {
@@ -74,6 +71,7 @@ export class AuthService {
     try {
       // 리프레시 토큰 검증
       const payload = this.jwtService.verify(refreshToken, {
+        secret: this.configService.get<string>('JWT_SECRET'),
       });
 
       // DB에서 사용자 조회 및 리프레시 토큰 일치 확인
