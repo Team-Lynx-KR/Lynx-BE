@@ -24,6 +24,15 @@ export class StockController {
         return await this.stockService.getKisAuthToken(stockTokenDto);
     }
 
+    @Post('kis/websocket/auth/approval')
+    @UseGuards(AuthGuard('jwt'))
+    @ApiBearerAuth('JWT-auth')
+    @ApiOperation({ summary: 'KIS WebSocket 접속키 발급', description: 'KIS WebSocket 연결을 위한 접속키(approval_key) 발급을 위해서는 JWT 토큰과 앱 키, 앱 시크릿 키가 필요합니다.' })
+    @ApiBody({ type: StockTokenDto })
+    async getWebsocketApprovalKey(@Body() stockTokenDto: StockTokenDto) {
+        return await this.stockService.getWebsocketApprovalKey(stockTokenDto);
+    }
+
     @Post('search')
     @UseGuards(AuthGuard('jwt'))
     @ApiBearerAuth('JWT-auth')
@@ -36,7 +45,7 @@ export class StockController {
     @Post('master/sync')
     @UseGuards(AuthGuard('jwt'))
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: '종목 마스터 데이터 수동 동기화', description: 'KOSPI와 KOSDAQ 종목 마스터 데이터를 수동으로 동기화합니다. (일반적으로 매일 오전 2시에 자동 실행됩니다)' })
+    @ApiOperation({ summary: '종목 마스터 데이터 수동 동기화 (관리자용)', description: 'KOSPI와 KOSDAQ 종목 마스터 데이터를 수동으로 동기화합니다. (일반적으로 매일 오전 2시에 자동 실행됩니다)' })
     async syncMaster() {
         return await this.stockCollectorService.syncAllMasters();
     }
@@ -44,7 +53,7 @@ export class StockController {
     @Get('master/count')
     @UseGuards(AuthGuard('jwt'))
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: '종목 마스터 데이터 개수 조회', description: 'DB에 저장된 종목 마스터 데이터 개수를 조회합니다.' })
+    @ApiOperation({ summary: '종목 마스터 데이터 개수 조회 (관리자용)', description: 'DB에 저장된 종목 마스터 데이터 개수를 조회합니다.' })
     async getMasterCount() {
         return await this.stockCollectorService.getMasterCount();
     }
@@ -52,7 +61,7 @@ export class StockController {
     @Post('price/collect')
     @UseGuards(AuthGuard('jwt'))
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: '일봉 데이터 수동 수집 (증분 업데이트)', description: '전 종목의 일봉 데이터를 증분 업데이트 방식으로 수집합니다. (일반적으로 매일 오전 3시에 자동 실행됩니다)' })
+    @ApiOperation({ summary: '일봉 데이터 수동 수집 (증분 업데이트) (관리자용)', description: '전 종목의 일봉 데이터를 증분 업데이트 방식으로 수집합니다. (일반적으로 매일 오전 3시에 자동 실행됩니다)' })
     async collectDailyPrices() {
         return await this.stockCollectorService.collectAllStocksDailyPrices();
     }
@@ -60,7 +69,7 @@ export class StockController {
     @Post('price/collect-full')
     @UseGuards(AuthGuard('jwt'))
     @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: '일봉 데이터 전체 수동 수집', description: '전 종목의 일봉 데이터를 지정한 일 수 만큼 강제로 전체 수집합니다. (예: 500일, 1000일 등)' })
+    @ApiOperation({ summary: '일봉 데이터 전체 수동 수집 (관리자용)', description: '전 종목의 일봉 데이터를 지정한 일 수 만큼 강제로 전체 수집합니다. (예: 500일, 1000일 등)' })
     @ApiBody({ type: StockCollectFullDto })
     async collectDailyPricesFull(@Body() dto: StockCollectFullDto) {
         return await this.stockCollectorService.collectAllStocksDailyPricesFull(dto.days);
