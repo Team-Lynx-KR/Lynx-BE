@@ -85,7 +85,8 @@ export class StockCollectorService implements OnModuleInit {
     let skipCount = 0;
 
     // 순차 처리: 종목당 순서대로 처리 (속도 대신 안정성/한도 회피 우선)
-    for (const stock of stocks) {
+    for (let i = 0; i < stocks.length; i++) {
+      const stock = stocks[i];
       try {
         const result = await this.updateStockDailyPrices(
           stock.code,
@@ -100,8 +101,15 @@ export class StockCollectorService implements OnModuleInit {
           successCount++;
         }
 
+        // 50종목마다 진행 상황 로그 출력
+        if ((i + 1) % 50 === 0 || i === stocks.length - 1) {
+          this.logger.log(
+            `[진행 상황] ${i + 1}/${stocks.length} 종목 처리 완료 (성공: ${successCount}, 스킵: ${skipCount}, 실패: ${failCount})`,
+          );
+        }
+
         // 종목 간 딜레이 (초당 거래건수 제한 회피용)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         this.logger.error(
           `종목 ${stock.code} (${stock.name}) 일봉 데이터 수집 실패:`,
@@ -109,8 +117,15 @@ export class StockCollectorService implements OnModuleInit {
         );
         failCount++;
 
+        // 50종목마다 진행 상황 로그 출력
+        if ((i + 1) % 50 === 0 || i === stocks.length - 1) {
+          this.logger.log(
+            `[진행 상황] ${i + 1}/${stocks.length} 종목 처리 완료 (성공: ${successCount}, 스킵: ${skipCount}, 실패: ${failCount})`,
+          );
+        }
+
         // 에러 후에도 잠깐 쉰 다음 다음 종목 진행
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
@@ -147,7 +162,8 @@ export class StockCollectorService implements OnModuleInit {
     let successCount = 0;
     let failCount = 0;
 
-    for (const stock of stocks) {
+    for (let i = 0; i < stocks.length; i++) {
+      const stock = stocks[i];
       try {
         const result = await this.collectStockDailyPricesFull(
           stock.code,
@@ -161,8 +177,15 @@ export class StockCollectorService implements OnModuleInit {
           successCount++;
         }
 
+        // 50종목마다 진행 상황 로그 출력
+        if ((i + 1) % 50 === 0 || i === stocks.length - 1) {
+          this.logger.log(
+            `[전체수집] [진행 상황] ${i + 1}/${stocks.length} 종목 처리 완료 (성공: ${successCount}, 실패: ${failCount})`,
+          );
+        }
+
         // 종목 간 딜레이 (초당 거래건수 제한 회피용)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         this.logger.error(
           `[전체수집] 종목 ${stock.code} (${stock.name}) 일봉 데이터 수집 실패:`,
@@ -170,7 +193,14 @@ export class StockCollectorService implements OnModuleInit {
         );
         failCount++;
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 50종목마다 진행 상황 로그 출력
+        if ((i + 1) % 50 === 0 || i === stocks.length - 1) {
+          this.logger.log(
+            `[전체수집] [진행 상황] ${i + 1}/${stocks.length} 종목 처리 완료 (성공: ${successCount}, 실패: ${failCount})`,
+          );
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
@@ -246,7 +276,7 @@ export class StockCollectorService implements OnModuleInit {
 
       // 한 종목 내에서도 각 API 호출 사이에 딜레이
       if (i < segments - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
@@ -371,7 +401,7 @@ export class StockCollectorService implements OnModuleInit {
         // 한 종목 내에서도 각 API 호출 사이에 딜레이 (초당 거래건수 제한 회피)
         if (i < 4) {
           // 마지막 호출이 아니면 0.5초 대기
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     } else {
@@ -414,7 +444,7 @@ export class StockCollectorService implements OnModuleInit {
         // 한 종목 내에서도 각 API 호출 사이에 딜레이 (초당 거래건수 제한 회피)
         if (i < segments - 1) {
           // 마지막 호출이 아니면 0.5초 대기
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     }
