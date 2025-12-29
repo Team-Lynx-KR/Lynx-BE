@@ -38,6 +38,8 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
+      ADMIN_KIS_APP_KEY: ${ADMIN_KIS_APP_KEY}
+      ADMIN_KIS_APP_SECRET_KEY: ${ADMIN_KIS_APP_SECRET_KEY}
     depends_on:
       lynx-mysql:
         condition: service_healthy
