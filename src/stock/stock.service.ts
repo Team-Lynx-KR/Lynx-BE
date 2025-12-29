@@ -41,6 +41,28 @@ export class StockService {
     }
   }
 
+  // 웹소켓 접속키 발급 (WebSocket용)
+  async getWebsocketApprovalKey(stockTokenDto: StockTokenDto) {
+    const { appKey, appSecretKey } = stockTokenDto;
+      try {
+        const url = `${this.KIS_BASE_URL_DEMO}/oauth2/Approval`;
+        const response = await axios.post(
+          url,
+          {
+            grant_type: 'client_credentials',
+            appkey: appKey,
+            secretkey: appSecretKey,
+          },
+          {
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+        return { message: '웹소켓 접속키 발급 성공', data: response.data };
+      } catch (error: any) {
+        throw new BadRequestException('웹소켓 접속키 발급 실패: ' + (error.response?.data?.message || error.message));
+      }
+    }
+
   async searchStock(stockSearchDto: StockSearchDto) {
     const { keyword } = stockSearchDto;
     
