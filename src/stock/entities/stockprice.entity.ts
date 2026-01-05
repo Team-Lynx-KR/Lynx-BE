@@ -19,13 +19,13 @@ export class StockPrice {
   open: number;
 
   @Column({ type: 'float' })
+  close: number;
+
+  @Column({ type: 'float' })
   high: number;
 
   @Column({ type: 'float' })
   low: number;
-
-  @Column({ type: 'float' })
-  close: number;
 
   @Column({ type: 'bigint' })
   volume: number;

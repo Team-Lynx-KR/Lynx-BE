@@ -1,5 +1,6 @@
 import { Entity, Column, PrimaryColumn, OneToMany, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { StockPrice } from './stockprice.entity';
+import { StockFeature } from './stockfeature.entity';
 
 @Entity('stockcode')
 export class StockCode {
@@ -22,4 +23,8 @@ export class StockCode {
   // 시세 데이터와 1:N 관계
   @OneToMany(() => StockPrice, (price: StockPrice) => price.stock)
   prices: StockPrice[];
+
+  // 등락률 데이터와 1:N 관계
+  @OneToMany(() => StockFeature, (feature: StockFeature) => feature.stock)
+  features: StockFeature[];
 }
