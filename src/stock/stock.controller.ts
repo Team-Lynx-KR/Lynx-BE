@@ -6,6 +6,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { StockSearchDto } from './dto/stock-search.dto';
 import { StockCollectFullDto } from './dto/stock-collect-full.dto';
+import { StockTransformService } from './stock-transform.service';
 
 @ApiTags('Stock (주식)')
 @Controller('stock')
@@ -13,6 +14,7 @@ export class StockController {
     constructor(
         private readonly stockService: StockService,
         private readonly stockCollectorService: StockCollectorService,
+        private readonly stockTransformService: StockTransformService,
     ) {}
 
     @Post('kis/restapi/auth/token')
@@ -73,5 +75,13 @@ export class StockController {
     @ApiBody({ type: StockCollectFullDto })
     async collectDailyPricesFull(@Body() dto: StockCollectFullDto) {
         return await this.stockCollectorService.collectAllStocksDailyPricesFull(dto.days);
+    }
+
+    @Post('feature/transform')
+    @UseGuards(AuthGuard('jwt'))
+    @ApiBearerAuth('JWT-auth')
+    @ApiOperation({ summary: '등락률 데이터 계산 (관리자용)', description: '과거 전체 데이터를 등락률 데이터로 변환합니다.' })
+    async transformFeatures() {
+        return await this.stockTransformService.transformAllHistory();
     }
 }

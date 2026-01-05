@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, forwardRef, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
@@ -8,6 +8,7 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { StockCode } from './entities/stockcode.entity';
 import { StockPrice } from './entities/stockprice.entity';
+import { StockTransformService } from './stock-transform.service';
 
 @Injectable()
 export class StockCollectorService implements OnModuleInit {
@@ -20,6 +21,8 @@ export class StockCollectorService implements OnModuleInit {
     @InjectRepository(StockPrice)
     private readonly stockPriceRepository: Repository<StockPrice>,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => StockTransformService))
+    private readonly stockTransformService: StockTransformService,
   ) {}
 
   // 서버 시작 시 자동으로 종목 마스터 데이터 동기화
@@ -48,7 +51,7 @@ export class StockCollectorService implements OnModuleInit {
     }
   }
 
-  // 매일 오전 3시에 전 종목 500일 일봉 데이터 수집
+  // 매일 오전 3시에 전 종목 일봉 데이터 수집 + 등락률 데이터 계산
   @Cron('0 3 * * *', {
     name: 'collectDailyPrices',
     timeZone: 'Asia/Seoul',
@@ -58,6 +61,15 @@ export class StockCollectorService implements OnModuleInit {
     try {
       await this.collectAllStocksDailyPrices();
       this.logger.log('일봉 데이터 수집 스케줄러 완료');
+      
+      // 일봉 데이터 수집 완료 후 등락률 계산 실행
+      this.logger.log('등락률 데이터 계산 시작');
+      try {
+        await this.stockTransformService.transformDailyFeatures();
+        this.logger.log('등락률 데이터 계산 완료');
+      } catch (error) {
+        this.logger.error('등락률 데이터 계산 실패:', error);
+      }
     } catch (error) {
       this.logger.error('일봉 데이터 수집 스케줄러 실패:', error);
     }
@@ -84,7 +96,7 @@ export class StockCollectorService implements OnModuleInit {
     let failCount = 0;
     let skipCount = 0;
 
-    // 순차 처리: 종목당 순서대로 처리 (속도 대신 안정성/한도 회피 우선)
+    // 순차 처리
     for (let i = 0; i < stocks.length; i++) {
       const stock = stocks[i];
       try {
