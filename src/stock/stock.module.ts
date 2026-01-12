@@ -8,6 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { StockCode } from './entities/stockcode.entity';
 import { StockPrice } from './entities/stockprice.entity';
 import { StockFeature } from './entities/stockfeature.entity';
+import { StockGateway } from './stock.gateway';
 
 @Module({
     imports: [
@@ -15,7 +16,7 @@ import { StockFeature } from './entities/stockfeature.entity';
         TypeOrmModule.forFeature([StockCode, StockPrice, StockFeature]),
     ],
     controllers: [StockController],
-    providers: [StockService, StockCollectorService, StockTransformService],
+    providers: [StockService, StockCollectorService, StockTransformService, StockGateway],
     exports: [StockService, StockCollectorService, StockTransformService],
 })
 export class StockModule {}
