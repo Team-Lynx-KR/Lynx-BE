@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StockCode } from './entities/stockcode.entity';
 import { StockPrice } from './entities/stockprice.entity';
+import { StockFeature } from './entities/stockfeature.entity';
 import { StockTokenDto } from './dto/stock-token.dto';
 import axios from 'axios';
 import { StockSearchDto } from './dto/stock-search.dto';
@@ -24,6 +25,8 @@ export class StockService {
     private stockCodeRepository: Repository<StockCode>,
     @InjectRepository(StockPrice)
     private stockPriceRepository: Repository<StockPrice>,
+    @InjectRepository(StockFeature)
+    private stockFeatureRepository: Repository<StockFeature>,
     @Inject(forwardRef(() => StockGateway))
     private stockGateway: StockGateway,
   ) {}
@@ -76,6 +79,87 @@ export class StockService {
     }
 
   /**
+   * 대시보드용 상위 종목 조회 (거래대금 기준)
+   */
+  async getTopStocksByTradingAmount(limit: number = 9) {
+    try {
+      // 가장 최신 수집된 날짜의 거래대금(거래량 * 종가) 기준으로 상위 종목 조회
+      const topStocks = await this.stockPriceRepository
+        .createQueryBuilder('price')
+        .select([
+          'stock.name AS name',
+          'price.volume * price.close AS tradingAmount',
+        ])
+        .innerJoin('stockcode', 'stock', 'stock.code = price.code')
+        .where('price.date = (SELECT MAX(date) FROM stockprice)')
+        .orderBy('price.volume * price.close', 'DESC') // 거래대금 = 거래량 * 종가
+        .limit(limit)
+        .getRawMany();
+
+      return {
+        message: '대시보드 상위 종목 조회 성공',
+        stocks: topStocks.map(stock => ({
+          name: stock.name,
+          tradingAmount: Math.round(stock.tradingAmount),
+        })),
+      };
+    } catch (error: any) {
+      throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
+    }
+  }
+
+  async getTopStocksByVolume(limit: number = 9) {
+    try {
+      // 가장 최신 수집된 날짜의 거래량 기준으로 상위 종목 조회
+      const topStocks = await this.stockPriceRepository
+        .createQueryBuilder('price')
+        .select([
+          'stock.name AS name',
+          'price.volume AS volume',
+        ])
+        .innerJoin('stockcode', 'stock', 'stock.code = price.code')
+        .where('price.date = (SELECT MAX(date) FROM stockprice)')
+        .orderBy('price.volume', 'DESC') // 거래량 기준
+        .limit(limit)
+        .getRawMany();
+
+      return {
+        message: '대시보드 상위 종목 조회 성공',
+        stocks: topStocks.map(stock => ({
+          name: stock.name,
+          volume: stock.volume,
+        })),
+      };
+    } catch (error: any) {
+      throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
+    }
+  }
+
+  async getDashboardStocks(limit: number = 9) {
+    try {
+      // 거래량 기준 TOP 9와 거래대금 기준 TOP 9를 동시에 조회
+      const [byVolume, byTradingAmount] = await Promise.all([
+        this.getTopStocksByVolume(limit),
+        this.getTopStocksByTradingAmount(limit),
+      ]);
+
+      return {
+        message: '대시보드 상위 종목 조회 성공',
+        byVolume: {
+          criteria: '거래량',
+          stocks: byVolume.stocks,
+        },
+        byTradingAmount: {
+          criteria: '거래대금',
+          stocks: byTradingAmount.stocks,
+        },
+      };
+    } catch (error: any) {
+      throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
+    }
+  }
+
+  /**
    * 종목 조회 관련 로직
    */
   async searchStock(stockSearchDto: StockSearchDto) {
@@ -97,7 +181,18 @@ export class StockService {
         order: { date: 'DESC' },
       });
 
-      return {message: '종목 조회 성공', stock: stock, prices: prices};
+      // 3. 종목 코드로 보조지표 및 등락률 데이터 조회
+      const features = await this.stockFeatureRepository.find({
+        where: { code: stock.code },
+        order: { date: 'DESC' },
+      });
+
+      return {
+        message: '종목 조회 성공',
+        stock: stock,
+        prices: prices,
+        features: features, // 보조지표 및 등락률 데이터 포함
+      };
     } catch (error: any) {
       throw new BadRequestException('종목 조회 실패: ' + (error.response?.data?.message || error.message));
     }
