@@ -80,19 +80,23 @@ export class StockService {
 
   /**
    * 대시보드용 상위 종목 조회 (거래대금 기준)
+   * 최근 일주일(7일) 거래대금 합계 기준
    */
   async getTopStocksByTradingAmount(limit: number = 9) {
     try {
-      // 가장 최신 수집된 날짜의 거래대금(거래량 * 종가) 기준으로 상위 종목 조회
+      // 최근 일주일(7일) 거래대금 합계 기준으로 상위 종목 조회
       const topStocks = await this.stockPriceRepository
         .createQueryBuilder('price')
         .select([
           'stock.name AS name',
-          'price.volume * price.close AS tradingAmount',
+          'SUM(price.volume * price.close) AS tradingAmount',
         ])
         .innerJoin('stockcode', 'stock', 'stock.code = price.code')
-        .where('price.date = (SELECT MAX(date) FROM stockprice)')
-        .orderBy('price.volume * price.close', 'DESC') // 거래대금 = 거래량 * 종가
+        .where('price.date >= DATE_SUB((SELECT MAX(date) FROM stockprice), INTERVAL 7 DAY)')
+        .andWhere('price.date <= (SELECT MAX(date) FROM stockprice)')
+        .groupBy('stock.code')
+        .addGroupBy('stock.name')
+        .orderBy('SUM(price.volume * price.close)', 'DESC') // 거래대금 합계 = 거래량 * 종가의 합
         .limit(limit)
         .getRawMany();
 
@@ -108,18 +112,25 @@ export class StockService {
     }
   }
 
+  /**
+   * 대시보드용 상위 종목 조회 (거래량 기준)
+   * 최근 일주일(7일) 거래량 합계 기준
+   */
   async getTopStocksByVolume(limit: number = 9) {
     try {
-      // 가장 최신 수집된 날짜의 거래량 기준으로 상위 종목 조회
+      // 최근 일주일(7일) 거래량 합계 기준으로 상위 종목 조회
       const topStocks = await this.stockPriceRepository
         .createQueryBuilder('price')
         .select([
           'stock.name AS name',
-          'price.volume AS volume',
+          'SUM(price.volume) AS volume',
         ])
         .innerJoin('stockcode', 'stock', 'stock.code = price.code')
-        .where('price.date = (SELECT MAX(date) FROM stockprice)')
-        .orderBy('price.volume', 'DESC') // 거래량 기준
+        .where('price.date >= DATE_SUB((SELECT MAX(date) FROM stockprice), INTERVAL 7 DAY)')
+        .andWhere('price.date <= (SELECT MAX(date) FROM stockprice)')
+        .groupBy('stock.code')
+        .addGroupBy('stock.name')
+        .orderBy('SUM(price.volume)', 'DESC') // 거래량 합계 기준
         .limit(limit)
         .getRawMany();
 
@@ -127,7 +138,7 @@ export class StockService {
         message: '대시보드 상위 종목 조회 성공',
         stocks: topStocks.map(stock => ({
           name: stock.name,
-          volume: stock.volume,
+          volume: Math.round(stock.volume),
         })),
       };
     } catch (error: any) {
