@@ -51,7 +51,12 @@ export class AuthService {
     }
 
     // 비밀번호 검증 성공 시 JWT 토큰 발급
-    const payload = { email: user.email };
+    // Payload에 필요한 정보를 모두 포함하여 DB 조회 없이 사용 가능하도록 최적화
+    const payload = { 
+      id: user.id,
+      email: user.email, 
+      nickname: user.nickname 
+    };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
@@ -81,7 +86,12 @@ export class AuthService {
       }
 
       // 새로운 액세스 토큰 발급
-      const newPayload = { email: user.email };
+      // Payload에 필요한 정보를 모두 포함하여 DB 조회 없이 사용 가능하도록 최적화
+      const newPayload = { 
+        id: user.id,
+        email: user.email, 
+        nickname: user.nickname 
+      };
       const accessToken = this.jwtService.sign(newPayload, { expiresIn: '1h' });
 
       // 새로운 리프레시 토큰 발급

@@ -51,7 +51,7 @@ export class StockCollectorService implements OnModuleInit {
     }
   }
 
-  // 매일 오전 3시에 전 종목 일봉 데이터 수집 + 등락률 데이터 계산
+  // 매일 오전 3시에 전 종목 일봉 데이터 수집 + 보조지표 계산 + 등락률 데이터 계산
   @Cron('0 3 * * *', {
     name: 'collectDailyPrices',
     timeZone: 'Asia/Seoul',
@@ -59,10 +59,18 @@ export class StockCollectorService implements OnModuleInit {
   async collectDailyPrices() {
     this.logger.log('일봉 데이터 수집 스케줄러 시작');
     try {
+      // 1. 주가 데이터 수집
       await this.collectAllStocksDailyPrices();
       this.logger.log('일봉 데이터 수집 스케줄러 완료');
       
-      // 일봉 데이터 수집 완료 후 등락률 계산 실행
+      // 2. 보조지표 계산 (등락률 계산 전에 실행)
+      try {
+        await this.stockTransformService.calculateDailyIndicators();
+      } catch (error) {
+        this.logger.error('보조지표 계산 실패:', error);
+      }
+      
+      // 3. 등락률 계산 (보조지표 계산 후 실행)
       this.logger.log('등락률 데이터 계산 시작');
       try {
         await this.stockTransformService.transformDailyFeatures();

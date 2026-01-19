@@ -1,17 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private configService: ConfigService,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -20,15 +15,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  /** JWT 토큰 검증 성공 시 실행 */
-  async validate(payload: { email: string }) {
-    const { email } = payload;
-    const user = await this.userRepository.findOne({ where: { email } });
-
-    if (!user) {
-      throw new UnauthorizedException('JWT 토큰에 해당하는 사용자가 존재하지 않습니다.');
-    }
-    // 사용자 정보 반환
-    return { id: user.id, email: user.email, nickname: user.nickname };
+  /** 
+   * JWT 토큰 검증 성공 시 실행
+   * 최적화: Payload에 이미 필요한 정보가 포함되어 있으므로 DB 조회 없이 바로 반환
+   * 이렇게 하면 매 요청마다 DB 조회가 발생하지 않아 성능이 크게 향상됩니다.
+   */
+  async validate(payload: { id: number; email: string; nickname: string }) {
+    // Payload에 포함된 정보를 그대로 반환 (DB 조회 제거)
+    return { 
+      id: payload.id, 
+      email: payload.email, 
+      nickname: payload.nickname 
+    };
   }
 }
