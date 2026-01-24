@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
 import { StockCode } from './entities/stockcode.entity';
 import { StockPrice } from './entities/stockprice.entity';
 import { StockFeature } from './entities/stockfeature.entity';
@@ -153,6 +154,78 @@ export class StockService {
   //     throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
   //   }
   // }
+
+  /**
+   * 대시보드 캐시 갱신 (스케줄러용)
+   * DB에서 조회하여 Redis에 캐시 저장
+   */
+  async refreshDashboardCache(limit: number = 9) {
+    try {
+      this.logger.log('대시보드 캐시 갱신 시작');
+
+      // 1. 거래대금 기준 TOP 9 종목 조회
+      const topStocksResult = await this.getTopStocksByTradingAmount(limit);
+      const topStocks = topStocksResult.stocks;
+
+      // 2. 각 종목의 모든 일일 주가 데이터 조회
+      const dailyPricesMap = new Map<string, StockPrice[]>();
+
+      // 각 종목의 일일 데이터 순차 조회
+      for (const stock of topStocks) {
+        const prices = await this.stockPriceRepository.find({
+          where: { code: stock.code },
+          order: { date: 'DESC' }, // 날짜 최신순 정렬
+        });
+        dailyPricesMap.set(stock.code, prices);
+      }
+
+      // 3. 종목 정보와 일일 데이터를 함께 반환
+      const stocksWithPrices = topStocks.map(stock => ({
+        code: stock.code,
+        name: stock.name,
+        tradingAmount: stock.tradingAmount,
+        dailyPrices: dailyPricesMap.get(stock.code) || [],
+      }));
+
+      // 4. Redis에 캐시 저장
+      const cacheData = {
+        stocks: stocksWithPrices,
+        cachedAt: new Date().toISOString(),
+      };
+      await this.redis.setex(this.CACHE_KEY, this.CACHE_TTL, JSON.stringify(cacheData));
+
+      this.logger.log(
+        `대시보드 캐시 갱신 완료 - ${stocksWithPrices.length}개 종목, ` +
+        `총 ${stocksWithPrices.reduce((sum, stock) => sum + stock.dailyPrices.length, 0)}개 레코드`,
+      );
+
+      return {
+        message: '대시보드 캐시 갱신 성공',
+        stocksCount: stocksWithPrices.length,
+        totalRecords: stocksWithPrices.reduce((sum, stock) => sum + stock.dailyPrices.length, 0),
+      };
+    } catch (error: any) {
+      this.logger.error('대시보드 캐시 갱신 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 매일 오전 6시에 대시보드 캐시 자동 갱신
+   */
+  @Cron('0 6 * * *', {
+    name: 'refreshDashboardCache',
+    timeZone: 'Asia/Seoul',
+  })
+  async refreshDashboardCacheScheduler() {
+    this.logger.log('스케줄러: 대시보드 캐시 갱신 시작');
+    try {
+      await this.refreshDashboardCache(9);
+      this.logger.log('스케줄러: 대시보드 캐시 갱신 완료');
+    } catch (error) {
+      this.logger.error('스케줄러: 대시보드 캐시 갱신 실패:', error);
+    }
+  }
 
   async getDashboardStocks(limit: number = 9) {
     const startTime = performance.now();
