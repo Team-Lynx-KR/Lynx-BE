@@ -24,6 +24,23 @@ services:
     networks:
       - lynx-network
 
+  lynx-redis:
+    image: redis:7-alpine
+    container_name: lynx-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lynx-network
+
   lynx-backend:
     image: ${DOCKER_USERNAME}/lynx-backend:dev
     container_name: lynx-backend
@@ -36,18 +53,29 @@ services:
       DB_USER: ${MYSQL_USER}
       DB_DATABASE: ${MYSQL_DATABASE}
       DB_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-lynx-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
       ADMIN_KIS_APP_KEY: ${ADMIN_KIS_APP_KEY}
       ADMIN_KIS_APP_SECRET_KEY: ${ADMIN_KIS_APP_SECRET_KEY}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"      # 로그 파일 최대 크기 (10MB)
+        max-file: "3"         # 보관할 로그 파일 개수 (3개)
     depends_on:
       lynx-mysql:
+        condition: service_healthy
+      lynx-redis:
         condition: service_healthy
     networks:
       - lynx-network
 
 volumes:
   mysql_prod_data:
+  redis_prod_data:
 
 networks:
   lynx-network:
