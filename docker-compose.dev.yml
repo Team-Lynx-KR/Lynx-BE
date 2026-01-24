@@ -19,6 +19,18 @@ services:
     networks:
       - lynx-network
 
+  lynx-redis:
+    image: redis:7-alpine
+    container_name: lynx-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - lynx-network
+
   lynx-backend:
     build:
       context: .
@@ -36,13 +48,25 @@ services:
       DB_USER: ${MYSQL_USER}
       DB_DATABASE: ${MYSQL_DATABASE}
       DB_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST:-lynx-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: development
     command: npm run start:dev 
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"      # 로그 파일 최대 크기 (10MB)
+        max-file: "3"         # 보관할 로그 파일 개수 (3개)
     depends_on:
       - lynx-mysql
+      - lynx-redis
     networks:
       - lynx-network
+
+volumes:
+  redis_data:
 
 networks:
   lynx-network:

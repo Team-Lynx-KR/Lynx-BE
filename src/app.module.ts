@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { StockModule } from './stock/stock.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [ConfigModule.forRoot({
@@ -25,7 +26,7 @@ import { StockModule } from './stock/stock.module';
       autoLoadEntities: true,
       synchronize: true, // 실 운영하기 전에는 반드시 false로 설정
     }),
-  }), UsersModule, AuthModule, StockModule],
+  }), RedisModule, UsersModule, AuthModule, StockModule],
   controllers: [AppController],
   providers: [AppService],
 })

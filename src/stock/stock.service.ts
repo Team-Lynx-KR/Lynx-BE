@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
 import { StockCode } from './entities/stockcode.entity';
 import { StockPrice } from './entities/stockprice.entity';
 import { StockFeature } from './entities/stockfeature.entity';
@@ -10,9 +11,13 @@ import { StockSearchDto } from './dto/stock-search.dto';
 import { StockSubscribeDto } from './dto/stock-subscribe.dto';
 import WebSocket from 'ws';
 import { StockGateway } from './stock.gateway';
+import type Redis from 'ioredis';
 
 @Injectable()
 export class StockService {
+  private readonly logger = new Logger(StockService.name);
+  private readonly CACHE_KEY = 'dashboard:top9';
+  private readonly CACHE_TTL = 86400; // 24시간 (초)
 
   private readonly KIS_BASE_URL_DEMO = 'https://openapivts.koreainvestment.com:29443';
   private readonly KIS_WS_URL_DEMO = 'ws://ops.koreainvestment.com:31000';
@@ -29,6 +34,8 @@ export class StockService {
     private stockFeatureRepository: Repository<StockFeature>,
     @Inject(forwardRef(() => StockGateway))
     private stockGateway: StockGateway,
+    @Inject('REDIS_CLIENT')
+    private readonly redis: Redis,
   ) {}
 
 
@@ -88,6 +95,7 @@ export class StockService {
       const topStocks = await this.stockPriceRepository
         .createQueryBuilder('price')
         .select([
+          'stock.code AS code',
           'stock.name AS name',
           'SUM(price.volume * price.close) AS tradingAmount',
         ])
@@ -103,6 +111,7 @@ export class StockService {
       return {
         message: '대시보드 상위 종목 조회 성공',
         stocks: topStocks.map(stock => ({
+          code: stock.code,
           name: stock.name,
           tradingAmount: Math.round(stock.tradingAmount),
         })),
@@ -112,60 +121,238 @@ export class StockService {
     }
   }
 
+  // /**
+  //  * 대시보드용 상위 종목 조회 (거래량 기준)
+  //  * 최근 일주일(7일) 거래량 합계 기준
+  //  */
+  // async getTopStocksByVolume(limit: number = 9) {
+  //   try {
+  //     // 최근 일주일(7일) 거래량 합계 기준으로 상위 종목 조회
+  //     const topStocks = await this.stockPriceRepository
+  //       .createQueryBuilder('price')
+  //       .select([
+  //         'stock.name AS name',
+  //         'SUM(price.volume) AS volume',
+  //       ])
+  //       .innerJoin('stockcode', 'stock', 'stock.code = price.code')
+  //       .where('price.date >= DATE_SUB((SELECT MAX(date) FROM stockprice), INTERVAL 7 DAY)')
+  //       .andWhere('price.date <= (SELECT MAX(date) FROM stockprice)')
+  //       .groupBy('stock.code')
+  //       .addGroupBy('stock.name')
+  //       .orderBy('SUM(price.volume)', 'DESC') // 거래량 합계 기준
+  //       .limit(limit)
+  //       .getRawMany();
+
+  //     return {
+  //       message: '대시보드 상위 종목 조회 성공',
+  //       stocks: topStocks.map(stock => ({
+  //         name: stock.name,
+  //         volume: Math.round(stock.volume),
+  //       })),
+  //     };
+  //   } catch (error: any) {
+  //     throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
+  //   }
+  // }
+
   /**
-   * 대시보드용 상위 종목 조회 (거래량 기준)
-   * 최근 일주일(7일) 거래량 합계 기준
+   * 대시보드 캐시 갱신 (스케줄러용)
+   * DB에서 조회하여 Redis에 캐시 저장
    */
-  async getTopStocksByVolume(limit: number = 9) {
+  async refreshDashboardCache(limit: number = 9) {
     try {
-      // 최근 일주일(7일) 거래량 합계 기준으로 상위 종목 조회
-      const topStocks = await this.stockPriceRepository
-        .createQueryBuilder('price')
-        .select([
-          'stock.name AS name',
-          'SUM(price.volume) AS volume',
-        ])
-        .innerJoin('stockcode', 'stock', 'stock.code = price.code')
-        .where('price.date >= DATE_SUB((SELECT MAX(date) FROM stockprice), INTERVAL 7 DAY)')
-        .andWhere('price.date <= (SELECT MAX(date) FROM stockprice)')
-        .groupBy('stock.code')
-        .addGroupBy('stock.name')
-        .orderBy('SUM(price.volume)', 'DESC') // 거래량 합계 기준
-        .limit(limit)
-        .getRawMany();
+      this.logger.log('대시보드 캐시 갱신 시작');
+
+      // 1. 거래대금 기준 TOP 9 종목 조회
+      const topStocksResult = await this.getTopStocksByTradingAmount(limit);
+      const topStocks = topStocksResult.stocks;
+
+      // 2. 각 종목의 모든 일일 주가 데이터 조회
+      const dailyPricesMap = new Map<string, StockPrice[]>();
+
+      // 각 종목의 일일 데이터 순차 조회
+      for (const stock of topStocks) {
+        const prices = await this.stockPriceRepository.find({
+          where: { code: stock.code },
+          order: { date: 'DESC' }, // 날짜 최신순 정렬
+        });
+        dailyPricesMap.set(stock.code, prices);
+      }
+
+      // 3. 종목 정보와 일일 데이터를 함께 반환
+      const stocksWithPrices = topStocks.map(stock => ({
+        code: stock.code,
+        name: stock.name,
+        tradingAmount: stock.tradingAmount,
+        dailyPrices: dailyPricesMap.get(stock.code) || [],
+      }));
+
+      // 4. Redis에 캐시 저장
+      const cacheData = {
+        stocks: stocksWithPrices,
+        cachedAt: new Date().toISOString(),
+      };
+      await this.redis.setex(this.CACHE_KEY, this.CACHE_TTL, JSON.stringify(cacheData));
+
+      this.logger.log(
+        `대시보드 캐시 갱신 완료 - ${stocksWithPrices.length}개 종목, ` +
+        `총 ${stocksWithPrices.reduce((sum, stock) => sum + stock.dailyPrices.length, 0)}개 레코드`,
+      );
 
       return {
-        message: '대시보드 상위 종목 조회 성공',
-        stocks: topStocks.map(stock => ({
-          name: stock.name,
-          volume: Math.round(stock.volume),
-        })),
+        message: '대시보드 캐시 갱신 성공',
+        stocksCount: stocksWithPrices.length,
+        totalRecords: stocksWithPrices.reduce((sum, stock) => sum + stock.dailyPrices.length, 0),
       };
     } catch (error: any) {
-      throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
+      this.logger.error('대시보드 캐시 갱신 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 매일 오전 6시에 대시보드 캐시 자동 갱신
+   */
+  @Cron('0 6 * * *', {
+    name: 'refreshDashboardCache',
+    timeZone: 'Asia/Seoul',
+  })
+  async refreshDashboardCacheScheduler() {
+    this.logger.log('스케줄러: 대시보드 캐시 갱신 시작');
+    try {
+      await this.refreshDashboardCache(9);
+      this.logger.log('스케줄러: 대시보드 캐시 갱신 완료');
+    } catch (error) {
+      this.logger.error('스케줄러: 대시보드 캐시 갱신 실패:', error);
     }
   }
 
   async getDashboardStocks(limit: number = 9) {
+    const startTime = performance.now();
+    const performanceMetrics = {
+      cacheHit: false,
+      redisQueryTime: 0,
+      jsonParseTime: 0,
+      step1_topStocksQuery: 0,
+      step2_dailyPricesQuery: 0,
+      step3_dataTransformation: 0,
+      redisSaveTime: 0,
+      totalTime: 0,
+      dataSize: {
+        stocksCount: 0,
+        totalRecords: 0,
+        estimatedSizeKB: 0,
+      },
+    };
+
     try {
-      // 거래량 기준 TOP 9와 거래대금 기준 TOP 9를 동시에 조회
-      const [byVolume, byTradingAmount] = await Promise.all([
-        this.getTopStocksByVolume(limit),
-        this.getTopStocksByTradingAmount(limit),
-      ]);
+      // Redis 캐시에서 먼저 조회
+      const redisStart = performance.now();
+      const cachedData = await this.redis.get(this.CACHE_KEY);
+      performanceMetrics.redisQueryTime = performance.now() - redisStart;
+
+      if (cachedData) {
+        // 캐시 히트 - Redis에 데이터가 있으면 바로 사용 (TTL로 만료 관리)
+        const parseStart = performance.now();
+        const parsedData = JSON.parse(cachedData);
+        performanceMetrics.jsonParseTime = performance.now() - parseStart;
+        performanceMetrics.totalTime = performance.now() - startTime;
+        performanceMetrics.cacheHit = true;
+        performanceMetrics.dataSize.stocksCount = parsedData.stocks.length;
+        performanceMetrics.dataSize.totalRecords = parsedData.stocks.reduce(
+          (sum: number, stock: any) => sum + stock.dailyPrices.length,
+          0,
+        );
+        performanceMetrics.dataSize.estimatedSizeKB = Math.round(
+          (performanceMetrics.dataSize.totalRecords * 330 * 1.2) / 1024,
+        );
+
+        this.logger.log(
+          `[성능 측정] 대시보드 조회 완료 (Redis 캐시 히트) - ` +
+          `총 시간: ${performanceMetrics.totalTime.toFixed(2)}ms | ` +
+          `Redis 조회: ${performanceMetrics.redisQueryTime.toFixed(2)}ms | ` +
+          `JSON 파싱: ${performanceMetrics.jsonParseTime.toFixed(2)}ms | ` +
+          `데이터 크기: ${performanceMetrics.dataSize.totalRecords}개 레코드 (약 ${performanceMetrics.dataSize.estimatedSizeKB}KB)`,
+        );
+
+        return {
+          message: '대시보드 상위 종목 조회 성공',
+          stocks: parsedData.stocks,
+        };
+      }
+
+      // 캐시 미스 - DB에서 조회
+      // 1. 거래대금 기준 TOP 9 종목 조회
+      const step1Start = performance.now();
+      const topStocksResult = await this.getTopStocksByTradingAmount(limit);
+      const topStocks = topStocksResult.stocks;
+      performanceMetrics.step1_topStocksQuery = performance.now() - step1Start;
+
+      // 2. 각 종목의 모든 일일 주가 데이터 조회
+      const step2Start = performance.now();
+      const dailyPricesMap = new Map<string, StockPrice[]>();
+
+      // 각 종목의 일일 데이터 순차 조회
+      for (const stock of topStocks) {
+        const prices = await this.stockPriceRepository.find({
+          where: { code: stock.code },
+          order: { date: 'DESC' }, // 날짜 최신순 정렬
+        });
+        dailyPricesMap.set(stock.code, prices);
+      }
+      performanceMetrics.step2_dailyPricesQuery = performance.now() - step2Start;
+
+      // 3. 종목 정보와 일일 데이터를 함께 반환
+      const step3Start = performance.now();
+      const stocksWithPrices = topStocks.map(stock => ({
+        code: stock.code,
+        name: stock.name,
+        tradingAmount: stock.tradingAmount,
+        dailyPrices: dailyPricesMap.get(stock.code) || [],
+      }));
+      performanceMetrics.step3_dataTransformation = performance.now() - step3Start;
+
+      // 4. Redis에 캐시 저장
+      const saveStart = performance.now();
+      const cacheData = {
+        stocks: stocksWithPrices,
+        cachedAt: new Date().toISOString(),
+      };
+      await this.redis.setex(this.CACHE_KEY, this.CACHE_TTL, JSON.stringify(cacheData));
+      performanceMetrics.redisSaveTime = performance.now() - saveStart;
+
+      // 성능 메트릭 계산
+      performanceMetrics.totalTime = performance.now() - startTime;
+      performanceMetrics.dataSize.stocksCount = stocksWithPrices.length;
+      performanceMetrics.dataSize.totalRecords = stocksWithPrices.reduce(
+        (sum, stock) => sum + stock.dailyPrices.length,
+        0,
+      );
+      performanceMetrics.dataSize.estimatedSizeKB = Math.round(
+        (performanceMetrics.dataSize.totalRecords * 330 * 1.2) / 1024,
+      );
+
+      // 성능 로그 출력
+      this.logger.log(
+        `[성능 측정] 대시보드 조회 완료 (DB 조회) - ` +
+        `총 시간: ${performanceMetrics.totalTime.toFixed(2)}ms | ` +
+        `STEP1(TOP9 조회): ${performanceMetrics.step1_topStocksQuery.toFixed(2)}ms | ` +
+        `STEP2(일일데이터 조회): ${performanceMetrics.step2_dailyPricesQuery.toFixed(2)}ms | ` +
+        `STEP3(데이터 변환): ${performanceMetrics.step3_dataTransformation.toFixed(2)}ms | ` +
+        `Redis 저장: ${performanceMetrics.redisSaveTime.toFixed(2)}ms | ` +
+        `데이터 크기: ${performanceMetrics.dataSize.totalRecords}개 레코드 (약 ${performanceMetrics.dataSize.estimatedSizeKB}KB)`,
+      );
 
       return {
         message: '대시보드 상위 종목 조회 성공',
-        byVolume: {
-          criteria: '거래량',
-          stocks: byVolume.stocks,
-        },
-        byTradingAmount: {
-          criteria: '거래대금',
-          stocks: byTradingAmount.stocks,
-        },
+        stocks: stocksWithPrices,
       };
     } catch (error: any) {
+      performanceMetrics.totalTime = performance.now() - startTime;
+      this.logger.error(
+        `[성능 측정] 대시보드 조회 실패 - 총 시간: ${performanceMetrics.totalTime.toFixed(2)}ms`,
+        error,
+      );
       throw new BadRequestException('대시보드 상위 종목 조회 실패: ' + (error.response?.data?.message || error.message));
     }
   }

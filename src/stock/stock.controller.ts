@@ -37,10 +37,16 @@ export class StockController {
     @Get('dashboard')
     @ApiOperation({ 
         summary: '대시보드 상위 종목 조회', 
-        description: '가장 최신 수집된 날짜 기준으로 거래량 TOP 9와 거래대금 TOP 9 종목을 조회합니다. 각 종목의 종목명과 전일 거래량/거래대금을 반환합니다. 프론트엔드에서 종목명을 사용하여 상세 조회 API를 호출할 수 있습니다.' 
+        description: '최근 일주일(7일) 거래대금 기준 TOP 9 종목을 조회하고, 각 종목의 모든 일일 주가 데이터를 함께 반환합니다. Redis 캐시에서 조회하며, 캐시 미스 시 DB에서 조회 후 캐시에 저장합니다. (일반적으로 매일 오전 6시에 자동 갱신됩니다)' 
     })
     async getDashboardStocks() {
         return await this.stockService.getDashboardStocks(9);
+    }
+
+    @Post('dashboard/cache/refresh')
+    @ApiOperation({ summary: '대시보드 캐시 수동 갱신 (관리자용)', description: '대시보드 데이터를 DB에서 조회하여 Redis 캐시를 수동으로 갱신합니다. (일반적으로 매일 오전 6시에 자동 실행됩니다)' })
+    async refreshDashboardCache() {
+        return await this.stockService.refreshDashboardCache(9);
     }
 
     @Post('search')
