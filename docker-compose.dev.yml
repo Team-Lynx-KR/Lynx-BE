@@ -31,6 +31,19 @@ services:
     networks:
       - lynx-network
 
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: lynx:lynx-redis:6379:0:${REDIS_PASSWORD}
+    networks:
+      - lynx-network
+    depends_on:
+      - lynx-redis
+
   lynx-backend:
     build:
       context: .
