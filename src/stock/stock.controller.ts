@@ -6,6 +6,7 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags, ApiResponse } from '@nes
 import { AuthGuard } from '@nestjs/passport';
 import { StockSearchDto } from './dto/stock-search.dto';
 import { StockTransformService } from './stock-transform.service';
+import { StockNewsDto } from './dto/stock-news.dto';
 
 @ApiTags('Stock (주식)')
 @Controller('stock')
@@ -16,24 +17,8 @@ export class StockController {
         private readonly stockTransformService: StockTransformService,
     ) {}
 
-    @Post('kis/restapi/auth/token')
-    @UseGuards(AuthGuard('jwt'))
-    @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: 'KIS REST API 인증 토큰 발급', description: 'KIS REST API 인증 토큰 발급을 위해서는 JWT 토큰과 앱 키, 앱 시크릿 키가 필요합니다.' })
-    @ApiBody({ type: StockTokenDto })
-    async getKisAuthToken(@Body() stockTokenDto: StockTokenDto) {
-        return await this.stockService.getKisAuthToken(stockTokenDto);
-    }
-
-    @Post('kis/websocket/auth/approval')
-    @UseGuards(AuthGuard('jwt'))
-    @ApiBearerAuth('JWT-auth')
-    @ApiOperation({ summary: 'KIS WebSocket 접속키 발급', description: 'KIS WebSocket 연결을 위한 접속키(approval_key) 발급을 위해서는 JWT 토큰과 앱 키, 앱 시크릿 키가 필요합니다.' })
-    @ApiBody({ type: StockTokenDto })
-    async getWebsocketApprovalKey(@Body() stockTokenDto: StockTokenDto) {
-        return await this.stockService.getWebsocketApprovalKey(stockTokenDto);
-    }
-
+    // ========== 이용자용 API ==========
+    
     @Get('dashboard')
     @ApiOperation({ 
         summary: '대시보드 상위 종목 조회', 
@@ -172,17 +157,47 @@ export class StockController {
         return await this.stockService.getDashboardStocks(9);
     }
 
-    @Post('dashboard/cache/refresh')
-    @ApiOperation({ summary: '대시보드 캐시 수동 갱신 (관리자용)', description: '대시보드 데이터를 DB에서 조회하여 Redis 캐시를 수동으로 갱신합니다. (일반적으로 매일 오전 6시에 자동 실행됩니다)' })
-    async refreshDashboardCache() {
-        return await this.stockService.refreshDashboardCache(9);
-    }
-
     @Post('search')
     @ApiOperation({ summary: '종목 검색', description: '종목명으로 종목을 검색합니다. 종목 검색 성공 시 종목 정보가 반환됩니다.' })
     @ApiBody({ type: StockSearchDto })
     async searchStock(@Body() stockSearchDto: StockSearchDto) {
         return await this.stockService.searchStock(stockSearchDto);
+    }
+
+    @Post('news')
+    @ApiOperation({ 
+        summary: '종목별 뉴스 조회', 
+        description: '종목명 또는 종목 코드를 입력하면 최신순으로 5개의 뉴스를 반환합니다. 네이버 검색 API를 사용합니다.' 
+    })
+    @ApiBody({ type: StockNewsDto })
+    async getStockNews(@Body() stockNewsDto: StockNewsDto) {
+        return await this.stockService.getStockNews(stockNewsDto);
+    }
+
+    @Post('kis/restapi/auth/token')
+    @UseGuards(AuthGuard('jwt'))
+    @ApiBearerAuth('JWT-auth')
+    @ApiOperation({ summary: 'KIS REST API 인증 토큰 발급', description: 'KIS REST API 인증 토큰 발급을 위해서는 JWT 토큰과 앱 키, 앱 시크릿 키가 필요합니다.' })
+    @ApiBody({ type: StockTokenDto })
+    async getKisAuthToken(@Body() stockTokenDto: StockTokenDto) {
+        return await this.stockService.getKisAuthToken(stockTokenDto);
+    }
+
+    @Post('kis/websocket/auth/approval')
+    @UseGuards(AuthGuard('jwt'))
+    @ApiBearerAuth('JWT-auth')
+    @ApiOperation({ summary: 'KIS WebSocket 접속키 발급', description: 'KIS WebSocket 연결을 위한 접속키(approval_key) 발급을 위해서는 JWT 토큰과 앱 키, 앱 시크릿 키가 필요합니다.' })
+    @ApiBody({ type: StockTokenDto })
+    async getWebsocketApprovalKey(@Body() stockTokenDto: StockTokenDto) {
+        return await this.stockService.getWebsocketApprovalKey(stockTokenDto);
+    }
+
+    // ========== 관리자용 API ==========
+
+    @Post('dashboard/cache/refresh')
+    @ApiOperation({ summary: '대시보드 캐시 수동 갱신 (관리자용)', description: '대시보드 데이터를 DB에서 조회하여 Redis 캐시를 수동으로 갱신합니다. (일반적으로 매일 오전 6시에 자동 실행됩니다)' })
+    async refreshDashboardCache() {
+        return await this.stockService.refreshDashboardCache(9);
     }
 
     @Post('master/sync')
