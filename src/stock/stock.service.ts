@@ -9,8 +9,10 @@ import { StockTokenDto } from './dto/stock-token.dto';
 import axios from 'axios';
 import { StockSearchDto } from './dto/stock-search.dto';
 import { StockSubscribeDto } from './dto/stock-subscribe.dto';
+import { StockNewsDto } from './dto/stock-news.dto';
 import WebSocket from 'ws';
 import { StockGateway } from './stock.gateway';
+import { ConfigService } from '@nestjs/config';
 import type Redis from 'ioredis';
 
 @Injectable()
@@ -36,6 +38,7 @@ export class StockService {
     private stockGateway: StockGateway,
     @Inject('REDIS_CLIENT')
     private readonly redis: Redis,
+    private readonly configService: ConfigService,
   ) {}
 
 
@@ -547,6 +550,124 @@ export class StockService {
       return parsedRecords.length > 0 ? parsedRecords : null;
     } catch (error) {
       return null;
+    }
+  }
+
+  /**
+   * 종목별 뉴스 조회
+   * 종목명 또는 종목 코드로 관련 뉴스를 조회합니다.
+   * 네이버 검색 API를 사용하여 한국 뉴스를 검색합니다.
+   * 최신순으로 5개만 반환합니다.
+   */
+  async getStockNews(stockNewsDto: StockNewsDto) {
+    const { keyword } = stockNewsDto;
+
+    try {
+      // 1. 종목명으로 종목 코드 찾기 (키워드가 종목명인 경우)
+      let stockCode = keyword;
+      let stockName = keyword;
+      const stock = await this.stockCodeRepository.findOne({
+        where: { name: keyword },
+      });
+
+      if (stock) {
+        stockCode = stock.code;
+        stockName = stock.name;
+      } else {
+        // 키워드가 종목 코드인지 확인
+        const codeStock = await this.stockCodeRepository.findOne({
+          where: { code: keyword },
+        });
+        if (codeStock) {
+          stockCode = keyword;
+          stockName = codeStock.name;
+        }
+      }
+
+      // 2. 네이버 검색 API 키 확인
+      const naverClientId = this.configService.get<string>('NAVER_CLIENT_ID', '');
+      const naverClientSecret = this.configService.get<string>('NAVER_CLIENT_SECRET', '');
+      
+      if (!naverClientId || !naverClientSecret) {
+        throw new BadRequestException('네이버 API 키가 설정되지 않았습니다. NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 .env 파일에 추가해주세요.');
+      }
+
+      // 3. 네이버 뉴스 검색 API 호출 (최신순으로 5개만)
+      const naverNewsApiUrl = 'https://openapi.naver.com/v1/search/news.json';
+
+      const response = await axios.get(naverNewsApiUrl, {
+        params: {
+          query: stockName, // 종목명으로 검색
+          display: 5, // 5개만
+          start: 1,
+          sort: 'date', // 최신순
+        },
+        headers: {
+          'X-Naver-Client-Id': naverClientId,
+          'X-Naver-Client-Secret': naverClientSecret,
+        },
+        timeout: 10000, // 10초 타임아웃
+      });
+
+      // 4. 응답 데이터 변환
+      const newsItems = response.data.items || [];
+      
+      const newsArticles = newsItems.map((item: any) => {
+        // HTML 태그 제거 및 디코딩
+        const decodeHtml = (html: string) => {
+          return html
+            .replace(/<[^>]*>/g, '') // HTML 태그 제거
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&')
+            .trim();
+        };
+
+        // 날짜 파싱 (네이버는 "Wed, 15 Jan 2025 10:30:00 +0900" 형식)
+        let publishedAt = new Date().toISOString();
+        try {
+          if (item.pubDate) {
+            publishedAt = new Date(item.pubDate).toISOString();
+          }
+        } catch (e) {
+          // 날짜 파싱 실패 시 현재 시간 사용
+        }
+
+        return {
+          title: decodeHtml(item.title || ''),
+          description: decodeHtml(item.description || ''),
+          url: item.link || '',
+          publishedAt: publishedAt,
+          source: item.originallink ? new URL(item.originallink).hostname.replace('www.', '') : '알 수 없음',
+        };
+      });
+
+      return {
+        message: '뉴스 조회 성공',
+        stock: {
+          code: stockCode,
+          name: stockName,
+        },
+        news: newsArticles,
+      };
+    } catch (error: any) {
+      if (error.response) {
+        this.logger.error(`네이버 뉴스 API 호출 실패: ${error.response.data?.errorMessage || error.message}`);
+        if (error.response.status === 401) {
+          throw new BadRequestException('네이버 API 키가 유효하지 않습니다. NAVER_CLIENT_ID와 NAVER_CLIENT_SECRET을 확인해주세요.');
+        } else if (error.response.status === 429) {
+          throw new BadRequestException('네이버 API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.');
+        }
+        throw new BadRequestException('뉴스 조회 실패: ' + (error.response.data?.errorMessage || error.message));
+      } else if (error.request) {
+        this.logger.error('네이버 뉴스 API 서버 연결 실패');
+        throw new BadRequestException('네이버 뉴스 API 서버에 연결할 수 없습니다.');
+      } else {
+        this.logger.error('뉴스 조회 실패:', error);
+        throw new BadRequestException('뉴스 조회 실패: ' + error.message);
+      }
     }
   }
 }
