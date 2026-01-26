@@ -60,6 +60,8 @@ services:
       NODE_ENV: production
       ADMIN_KIS_APP_KEY: ${ADMIN_KIS_APP_KEY}
       ADMIN_KIS_APP_SECRET_KEY: ${ADMIN_KIS_APP_SECRET_KEY}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
     logging:
       driver: "json-file"
       options:
