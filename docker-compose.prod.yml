@@ -30,6 +30,8 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    environment:
+      TZ: Asia/Seoul
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_prod_data:/data
@@ -48,6 +50,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      TZ: Asia/Seoul
       DB_HOST: lynx-mysql
       DB_PORT: ${MYSQL_PORT:-3306}
       DB_USER: ${MYSQL_USER}
