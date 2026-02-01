@@ -23,8 +23,15 @@ docker compose run --rm certbot certonly \
   -d lostparty.com \
   -d www.lostparty.com
 
-# 4. Nginx 재시작
+# 4. 정식 설정으로 변경 (HTTPS 활성화)
+echo "📝 정식 Nginx 설정 적용 중..."
+# docker-compose.yml에서 nginx.conf.init → nginx.conf로 변경 필요
+# 또는 수동으로:
+# sed -i 's/nginx.conf.init/nginx.conf/g' docker-compose.yml
+
+# 5. Nginx 재시작
 echo "🔄 Nginx 재시작 중..."
 docker compose restart lynx-nginx
 
 echo "✅ 완료! https://lostparty.com 으로 접속하세요."
+echo "⚠️  인증서 발급 후 docker-compose.yml에서 nginx.conf.init → nginx.conf로 변경하세요!"
