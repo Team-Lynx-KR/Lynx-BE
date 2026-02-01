@@ -79,14 +79,14 @@ services:
       - lynx-network
 
   lynx-nginx:
-    build:
-      context: ./nginx
+    image: nginx:alpine
     container_name: lynx-nginx
     restart: always
     ports:
       - "80:80"
       - "443:443"
     volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - certbot_certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
     depends_on:
