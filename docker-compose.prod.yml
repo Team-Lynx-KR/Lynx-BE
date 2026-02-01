@@ -47,8 +47,8 @@ services:
     image: ${DOCKER_USERNAME}/lynx-backend:dev
     container_name: lynx-backend
     restart: always
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       TZ: Asia/Seoul
       DB_HOST: lynx-mysql
@@ -78,9 +78,27 @@ services:
     networks:
       - lynx-network
 
+  lynx-nginx:
+    build:
+      context: ./nginx
+    container_name: lynx-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - lynx-backend
+    networks:
+      - lynx-network
+
 volumes:
   mysql_prod_data:
   redis_prod_data:
+  certbot_certs:
+  certbot_www:
 
 networks:
   lynx-network:
