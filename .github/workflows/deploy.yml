@@ -55,8 +55,25 @@ jobs:
           # 3. 최신 이미지 받기
           sudo docker pull ${{ secrets.DOCKER_USERNAME }}/lynx-backend:dev
           
-          # 4. 꼬임 방지를 위해 끄고 다시 켬
+          # 4. 서비스 시작
           sudo docker compose up -d --force-recreate
           
-          # 5. 안 쓰는 이미지 청소
+          # 5. SSL 인증서 확인 및 HTTPS 설정 자동 활성화
+          # 인증서가 이미 있으면 자동으로 nginx.conf 사용 (HTTPS 활성화)
+          CERT_PATH="/var/lib/docker/volumes/$(sudo docker compose config --volumes | grep certbot_certs | head -1)/_data/live/lostparty.com"
+          if sudo test -d "$CERT_PATH" && sudo test -f "$CERT_PATH/fullchain.pem"; then
+            echo "✅ SSL 인증서 발견 - HTTPS 설정 자동 적용"
+            sudo sed -i 's/nginx.conf.init/nginx.conf/g' docker-compose.yml
+            sudo docker compose restart lynx-nginx || true
+            
+            # 인증서 갱신 확인 (90일마다 필요)
+            echo "🔄 인증서 갱신 확인 중..."
+            sudo docker compose run --rm certbot renew --quiet || true
+            sudo docker compose restart lynx-nginx || true
+          else
+            echo "ℹ️  SSL 인증서 없음 - HTTP만 사용 (nginx.conf.init)"
+            echo "   인증서 발급은 수동으로 진행하세요: docker compose run --rm certbot certonly ..."
+          fi
+          
+          # 6. 안 쓰는 이미지 청소
           sudo docker image prune -f

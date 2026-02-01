@@ -95,6 +95,14 @@ services:
     networks:
       - lynx-network
 
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    networks:
+      - lynx-network
+
 volumes:
   mysql_prod_data:
   redis_prod_data:
